@@ -13,6 +13,8 @@
         <class>genowa.model.WarpCtlData</class>
         <class>genowa.model.GenAlgorithm</class>
         <class>genowa.model.GenAlgorithmStep</class>
+        <class>genowa.model.GenTable</class>
+        <class>genowa.model.GenField</class>
         
         <properties>
             <!-- PostgreSQL Connection -->

@@ -1,6 +1,7 @@
 genowa/model/GenDataModels$GenAlgorithm.class
 genowa/generator/genobj/AbstractGenerationObject.class
 genowa/model/GenDataModels$GenQueryPattern.class
+genowa/model/GenFieldId.class
 genowa/generator/BulkProcessGenerator$1.class
 genowa/model/GenDataModels$GenModuleTypeCollection.class
 genowa/model/GenAlgorithm.class
@@ -8,6 +9,8 @@ genowa/model/GenDataModels$GenDataTypeCollection.class
 genowa/ui/screens/InsLineTableAssignScreen.class
 genowa/util/LogLevel.class
 genowa/generator/trigger/cobol/CobolTriggers$WsvarsTrigger.class
+genowa/model/GenTable.class
+genowa/repository/GenFieldRepository.class
 genowa/algorithm/AlgorithmConverter$ConversionError.class
 genowa/generator/trigger/cobol/CobolTriggers$IoModuleTrigger.class
 genowa/model/GenDataModels$GenTable.class
@@ -59,10 +62,12 @@ genowa/model/GenDataModels$GenRule.class
 genowa/model/GenDataModels$GenTableDefinitionCollection.class
 genowa/model/GenDataModels$GenSequenceCollection.class
 genowa/ui/AlgorithmScreen$AlgorithmLine.class
+genowa/repository/GenTableRepository.class
 genowa/ui/screens/GenerationScreen.class
 genowa/ui/components/DockablePane$DockSide.class
 genowa/repository/WarpCtlRepository.class
 genowa/model/GenDataModels$GenSequence.class
+genowa/model/GenField.class
 genowa/generator/trigger/cobol/CobolTriggers.class
 genowa/model/GenDataModels$GenTableTypeCollection.class
 genowa/generator/trigger/cobol/CobolTriggers$IncludeTrigger.class

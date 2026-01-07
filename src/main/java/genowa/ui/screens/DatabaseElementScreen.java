@@ -1,5 +1,10 @@
 package genowa.ui.screens;
 
+import genowa.model.GenField;
+import genowa.model.GenTable;
+import genowa.repository.GenFieldRepository;
+import genowa.repository.GenTableRepository;
+import genowa.Database;
 import genowa.ui.components.DockablePane;
 import javafx.beans.property.*;
 import javafx.collections.*;
@@ -18,13 +23,14 @@ import java.util.*;
  * Allows users to view, add, edit, and delete database table/column definitions
  * that can be used in algorithms and conditionals.
  */
-public class DatabaseElementScreen extends BorderPane {
-
+public class DatabaseElementScreen extends BorderPane
+{
     // Header controls
-    private ComboBox<String> insuranceLineCombo;
+    private ComboBox<String> tableCombo;
     private ComboBox<String> columnDescriptionCombo;
     private CheckBox includeDeletedCheck;
     private CheckBox overrideTemplateCheck;
+    private TextField searchField;
 
     // Main table
     private TableView<ColumnEntry> tableView;
@@ -38,23 +44,29 @@ public class DatabaseElementScreen extends BorderPane {
     // Context menu
     private ContextMenu contextMenu;
 
-    public DatabaseElementScreen() {
+    // Status bar
+    private Label statusLabel;
+    private Label countLabel;
+
+    public DatabaseElementScreen()
+    {
         setPadding(new Insets(10));
         setStyle("-fx-background-color: #f5f5f5;");
 
         // Build UI
         setTop(createHeader());
         setCenter(createMainContent());
-        setBottom(createColumnOptions());
+        setBottom(createBottomPanel());
 
-        // Load sample data
-        loadSampleData();
+        // Load data from database
+        loadTables();
 
         // Create context menu
         createContextMenu();
     }
 
-    private VBox createHeader() {
+    private VBox createHeader()
+    {
         VBox header = new VBox(10);
         header.setPadding(new Insets(0, 0, 10, 0));
 
@@ -62,15 +74,14 @@ public class DatabaseElementScreen extends BorderPane {
         Label titleLabel = new Label("Table Column Entry");
         titleLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
 
-        // First row: Insurance Line + checkboxes
+        // First row: Table selection + checkboxes
         HBox row1 = new HBox(20);
         row1.setAlignment(Pos.CENTER_LEFT);
 
-        Label insLineLabel = new Label("Insurance Line:");
-        insuranceLineCombo = new ComboBox<>();
-        insuranceLineCombo.getItems().addAll("Automobile", "Homeowners", "Commercial Auto", "Workers Comp");
-        insuranceLineCombo.setValue("Automobile");
-        insuranceLineCombo.setPrefWidth(200);
+        Label tableLabel = new Label("Table:");
+        tableCombo = new ComboBox<>();
+        tableCombo.setPrefWidth(250);
+        tableCombo.setOnAction(e -> loadFieldsForSelectedTable());
 
         includeDeletedCheck = new CheckBox("Include Deleted Rows");
         overrideTemplateCheck = new CheckBox("Override with Template");
@@ -78,28 +89,32 @@ public class DatabaseElementScreen extends BorderPane {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        row1.getChildren().addAll(insLineLabel, insuranceLineCombo, spacer, includeDeletedCheck, overrideTemplateCheck);
+        row1.getChildren().addAll(tableLabel, tableCombo, spacer, includeDeletedCheck, overrideTemplateCheck);
 
-        // Second row: Column Description filter
+        // Second row: Column Description filter + Search
         HBox row2 = new HBox(10);
         row2.setAlignment(Pos.CENTER_LEFT);
 
         Label colDescLabel = new Label("Column Description:");
         columnDescriptionCombo = new ComboBox<>();
         columnDescriptionCombo.setEditable(true);
-        columnDescriptionCombo.getItems().addAll(
-            "Vehicle Class Code", "Model Year Code", "Vehicle Symbol Code",
-            "Vehicle Type Code", "Vehicle Use Code"
-        );
-        columnDescriptionCombo.setPrefWidth(300);
+        columnDescriptionCombo.setPrefWidth(250);
+        columnDescriptionCombo.setOnAction(e -> filterByDescription());
 
-        row2.getChildren().addAll(colDescLabel, columnDescriptionCombo);
+        Label searchLabel = new Label("Search:");
+        searchField = new TextField();
+        searchField.setPrefWidth(150);
+        searchField.setPromptText("Column name...");
+        searchField.textProperty().addListener((obs, old, newVal) -> filterBySearch(newVal));
+
+        row2.getChildren().addAll(colDescLabel, columnDescriptionCombo, searchLabel, searchField);
 
         header.getChildren().addAll(titleLabel, row1, row2);
         return header;
     }
 
-    private VBox createMainContent() {
+    private VBox createMainContent()
+    {
         VBox content = new VBox(5);
 
         // Table header label
@@ -124,6 +139,11 @@ public class DatabaseElementScreen extends BorderPane {
         nameCol.setCellValueFactory(new PropertyValueFactory<>("columnName"));
         nameCol.setPrefWidth(180);
 
+        // COBOL name
+        TableColumn<ColumnEntry, String> cobolCol = new TableColumn<>("COBOL Name");
+        cobolCol.setCellValueFactory(new PropertyValueFactory<>("cobolName"));
+        cobolCol.setPrefWidth(150);
+
         // Data type
         TableColumn<ColumnEntry, String> typeCol = new TableColumn<>("Type");
         typeCol.setCellValueFactory(new PropertyValueFactory<>("dataType"));
@@ -137,32 +157,40 @@ public class DatabaseElementScreen extends BorderPane {
         // Flags (Required, etc.)
         TableColumn<ColumnEntry, String> flagsCol = new TableColumn<>("Flags");
         flagsCol.setCellValueFactory(new PropertyValueFactory<>("flags"));
-        flagsCol.setPrefWidth(80);
+        flagsCol.setPrefWidth(100);
 
         // Description
         TableColumn<ColumnEntry, String> descCol = new TableColumn<>("Description");
         descCol.setCellValueFactory(new PropertyValueFactory<>("description"));
         descCol.setPrefWidth(250);
 
-        tableView.getColumns().addAll(treeCol, nameCol, typeCol, lengthCol, flagsCol, descCol);
+        tableView.getColumns().addAll(treeCol, nameCol, cobolCol, typeCol, lengthCol, flagsCol, descCol);
 
         // Custom row styling
-        tableView.setRowFactory(tv -> {
-            TableRow<ColumnEntry> row = new TableRow<>() {
+        tableView.setRowFactory(tv ->
+        {
+            TableRow<ColumnEntry> row = new TableRow<>()
+            {
                 @Override
-                protected void updateItem(ColumnEntry item, boolean empty) {
+                protected void updateItem(ColumnEntry item, boolean empty)
+                {
                     super.updateItem(item, empty);
-                    if (item != null && item.isKey()) {
-                        setStyle("-fx-font-weight: bold;");
-                    } else {
+                    if (item != null && item.isKey())
+                    {
+                        setStyle("-fx-font-weight: bold; -fx-text-fill: #0066cc;");
+                    }
+                    else
+                    {
                         setStyle("");
                     }
                 }
             };
 
             // Right-click context menu
-            row.setOnMouseClicked(event -> {
-                if (event.getButton() == MouseButton.SECONDARY && !row.isEmpty()) {
+            row.setOnMouseClicked(event ->
+            {
+                if (event.getButton() == MouseButton.SECONDARY && !row.isEmpty())
+                {
                     contextMenu.show(row, event.getScreenX(), event.getScreenY());
                 }
             });
@@ -174,9 +202,13 @@ public class DatabaseElementScreen extends BorderPane {
         return content;
     }
 
-    private HBox createColumnOptions() {
+    private VBox createBottomPanel()
+    {
+        VBox bottom = new VBox(10);
+        bottom.setPadding(new Insets(10, 0, 0, 0));
+
+        // Column options row
         HBox options = new HBox(15);
-        options.setPadding(new Insets(10, 0, 0, 0));
         options.setAlignment(Pos.CENTER_LEFT);
         options.setStyle("-fx-border-color: #cccccc; -fx-border-width: 1 0 0 0; -fx-padding: 10 0 0 0;");
 
@@ -224,10 +256,25 @@ public class DatabaseElementScreen extends BorderPane {
             cursorRadio, readRadio, keysetRadio, existsRadio, cursorResultRadio
         );
 
-        return options;
+        // Status bar
+        HBox statusBar = new HBox(20);
+        statusBar.setAlignment(Pos.CENTER_LEFT);
+        statusBar.setPadding(new Insets(5, 0, 0, 0));
+
+        statusLabel = new Label("Ready");
+        countLabel = new Label("0 fields");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        statusBar.getChildren().addAll(statusLabel, spacer, countLabel);
+
+        bottom.getChildren().addAll(options, statusBar);
+        return bottom;
     }
 
-    private void createContextMenu() {
+    private void createContextMenu()
+    {
         contextMenu = new ContextMenu();
 
         MenuItem keyColumnsItem = new MenuItem("Key Columns...");
@@ -287,68 +334,245 @@ public class DatabaseElementScreen extends BorderPane {
         );
     }
 
+    /**
+     * Load all tables from gen_tables into the combo box.
+     */
+    private void loadTables()
+    {
+        statusLabel.setText("Loading tables...");
+
+        try
+        {
+            List<String> tableNames = Database.getInstance().executeRead(em ->
+            {
+                GenTableRepository repo = new GenTableRepository(em);
+                return repo.findAllTableNames();
+            });
+
+            tableCombo.getItems().clear();
+            tableCombo.getItems().addAll(tableNames);
+
+            statusLabel.setText("Loaded " + tableNames.size() + " tables");
+
+            // Select first table if available
+            if (!tableNames.isEmpty())
+            {
+                tableCombo.setValue(tableNames.get(0));
+                loadFieldsForSelectedTable();
+            }
+        }
+        catch (Exception e)
+        {
+            statusLabel.setText("Error loading tables: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Load fields for the selected table from gen_fields.
+     */
+    private void loadFieldsForSelectedTable()
+    {
+        String selectedTable = tableCombo.getValue();
+        if (selectedTable == null || selectedTable.isEmpty())
+        {
+            return;
+        }
+
+        statusLabel.setText("Loading fields for " + selectedTable + "...");
+
+        try
+        {
+            List<GenField> fields = Database.getInstance().executeRead(em ->
+            {
+                GenTableRepository tableRepo = new GenTableRepository(em);
+                GenFieldRepository fieldRepo = new GenFieldRepository(em);
+
+                // Find the table by name
+                return tableRepo.findByName(selectedTable)
+                    .map(table -> fieldRepo.findByTableIndex(table.getTableIndexNbr()))
+                    .orElse(new ArrayList<>());
+            });
+
+            columns.clear();
+
+            // Convert GenField to ColumnEntry
+            for (int i = 0; i < fields.size(); i++)
+            {
+                GenField f = fields.get(i);
+                String prefix = (i == fields.size() - 1) ? "└──" : "├──";
+                boolean isKey = "Y".equals(f.getKeyFlagCd());
+
+                columns.add(new ColumnEntry(
+                    prefix,
+                    f.getColumnNm(),
+                    f.getCobolNm() != null ? f.getCobolNm() : "",
+                    f.getDataTypeDisplay(),
+                    f.getLengthDisplay(),
+                    f.getFlagsDisplay(),
+                    f.getLongAliasNm() != null ? "[" + f.getLongAliasNm() + "]" : "",
+                    isKey
+                ));
+            }
+
+            // Select first row
+            if (!columns.isEmpty())
+            {
+                tableView.getSelectionModel().selectFirst();
+            }
+
+            countLabel.setText(fields.size() + " fields");
+            statusLabel.setText("Loaded " + fields.size() + " fields for " + selectedTable);
+
+            // Load descriptions for filter combo
+            loadDescriptions();
+        }
+        catch (Exception e)
+        {
+            statusLabel.setText("Error loading fields: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Load distinct descriptions for the filter combo.
+     */
+    private void loadDescriptions()
+    {
+        try
+        {
+            List<String> descriptions = Database.getInstance().executeRead(em ->
+            {
+                GenFieldRepository repo = new GenFieldRepository(em);
+                return repo.findDistinctDescriptions();
+            });
+
+            columnDescriptionCombo.getItems().clear();
+            columnDescriptionCombo.getItems().addAll(descriptions);
+        }
+        catch (Exception e)
+        {
+            // Non-critical, just log
+            System.err.println("Error loading descriptions: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Filter columns by description.
+     */
+    private void filterByDescription()
+    {
+        String filter = columnDescriptionCombo.getValue();
+        if (filter == null || filter.isEmpty())
+        {
+            loadFieldsForSelectedTable();
+            return;
+        }
+
+        // Filter the current columns
+        ObservableList<ColumnEntry> filtered = columns.filtered(c ->
+            c.getDescription().toLowerCase().contains(filter.toLowerCase())
+        );
+        tableView.setItems(filtered);
+        countLabel.setText(filtered.size() + " fields (filtered)");
+    }
+
+    /**
+     * Filter columns by search text.
+     */
+    private void filterBySearch(String search)
+    {
+        if (search == null || search.isEmpty())
+        {
+            tableView.setItems(columns);
+            countLabel.setText(columns.size() + " fields");
+            return;
+        }
+
+        String lower = search.toLowerCase();
+        ObservableList<ColumnEntry> filtered = columns.filtered(c ->
+            c.getColumnName().toLowerCase().contains(lower) ||
+            c.getCobolName().toLowerCase().contains(lower) ||
+            c.getDescription().toLowerCase().contains(lower)
+        );
+        tableView.setItems(filtered);
+        countLabel.setText(filtered.size() + " fields (filtered)");
+    }
+
     // Action handlers
-    private void showKeyColumnsDialog() {
+    private void showKeyColumnsDialog()
+    {
         ColumnEntry selected = tableView.getSelectionModel().getSelectedItem();
-        if (selected != null) {
+        if (selected != null)
+        {
             TablePropertiesDialog dialog = new TablePropertiesDialog(selected);
             dialog.showAndWait();
         }
     }
 
-    private void showTableColumnChangeDialog() {
+    private void showTableColumnChangeDialog()
+    {
         showAlert("Table/Column Change", "Opens dialog to modify table/column definition.");
     }
 
-    private void addDefinition() {
+    private void addDefinition()
+    {
         showAlert("Add Definition", "Opens dialog to add a new database element definition.");
     }
 
-    private void saveDefinition() {
+    private void saveDefinition()
+    {
         showAlert("Save", "Definition saved successfully.");
     }
 
-    private void deleteDefinition() {
+    private void deleteDefinition()
+    {
         ColumnEntry selected = tableView.getSelectionModel().getSelectedItem();
-        if (selected != null) {
+        if (selected != null)
+        {
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
             confirm.setTitle("Delete Definition");
             confirm.setHeaderText("Delete " + selected.getColumnName() + "?");
             confirm.setContentText("This action cannot be undone.");
-            confirm.showAndWait().ifPresent(response -> {
-                if (response == ButtonType.OK) {
+            confirm.showAndWait().ifPresent(response ->
+            {
+                if (response == ButtonType.OK)
+                {
                     columns.remove(selected);
                 }
             });
         }
     }
 
-    private void checkUnusedElements() {
+    private void checkUnusedElements()
+    {
         showAlert("Unused Elements", "Scanning for elements not referenced in any algorithm or conditional...");
     }
 
-    private void checkElementUsage() {
+    private void checkElementUsage()
+    {
         ColumnEntry selected = tableView.getSelectionModel().getSelectedItem();
-        if (selected != null) {
-            showAlert("Element Usage", 
+        if (selected != null)
+        {
+            showAlert("Element Usage",
                 "Checking where " + selected.getColumnName() + " is used...\n\n" +
-                "Found in:\n" +
-                "- Algorithm: PGUOBK3 (Bodily Injury Liability)\n" +
-                "- Algorithm: PGUOUM1 (Uninsured Motorist)\n" +
-                "- Conditional: Determine Vehicle Factor");
+                "(Feature not yet implemented)");
         }
     }
 
-    private void generateAffectedModules() {
+    private void generateAffectedModules()
+    {
         showAlert("Generate Modules", "Regenerating code for all modules using selected element...");
     }
 
-    private void closeScreen() {
+    private void closeScreen()
+    {
         // In a real app, this would close the screen/window
         showAlert("Exit", "Closing Database Elements screen.");
     }
 
-    private void showAlert(String title, String message) {
+    private void showAlert(String title, String message)
+    {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle(title);
         alert.setHeaderText(null);
@@ -356,53 +580,26 @@ public class DatabaseElementScreen extends BorderPane {
         alert.showAndWait();
     }
 
-    private void loadSampleData() {
-        // Sample PA_VEHICLE_V table columns
-        columns.addAll(
-            new ColumnEntry("├──", "PA_DRV_VEH_CLS_CD", "Character", "6", "", "[Vehicle Class Code]", true),
-            new ColumnEntry("├──", "PA_EGE_SZ_CC_CD", "Character", "2", "", "", false),
-            new ColumnEntry("├──", "PA_MAKE_CD", "Character", "4", "", "", false),
-            new ColumnEntry("├──", "PA_MODEL_CD", "Character", "10", "", "", false),
-            new ColumnEntry("├──", "PA_MODEL_YR_NBR", "UShort", "0", "", "[Model Year Code]", true),
-            new ColumnEntry("├──", "PAVE_MUC_DSC_CD", "Character", "1", "", "", false),
-            new ColumnEntry("├──", "PAVE_SR_DRV_DSC_CD", "Character", "1", "", "[Senior Driver Accident Prevention Code]", false),
-            new ColumnEntry("├──", "PA_ANN_MILES_CD", "Character", "2", "", "", false),
-            new ColumnEntry("├──", "PAVE_MILES_WRK_NBR", "UShort", "0", "", "", false),
-            new ColumnEntry("├──", "PA_PFO_CD", "Character", "1", "", "", false),
-            new ColumnEntry("├──", "PAVE_VIN_NBR", "Character", "25", "", "", false),
-            new ColumnEntry("├──", "PAVE_STATED_AMT", "Double", "7.0", "", "[Classic Maximum Stated Amount...]", false),
-            new ColumnEntry("├──", "PA_SYMBOL_CD", "Character", "2", "", "[Vehicle Symbol Code]", false),
-            new ColumnEntry("├──", "PAVE_TORT_IND", "Character", "1", "", "", false),
-            new ColumnEntry("├──", "PA_VEH_TYPE_CD", "Character", "2", "", "[Vehicle Type Code]", false),
-            new ColumnEntry("├──", "PA_VEH_USE_CD", "Character", "2", "Required", "[VEHICLE USE CODE]", false),
-            new ColumnEntry("├──", "PA_POSTAL_CD", "Character", "10", "", "", false),
-            new ColumnEntry("├──", "PAVE_EXT_NOWN_CD", "Character", "1", "", "", false),
-            new ColumnEntry("├──", "PAVE_REG_USE_IND", "Character", "1", "Required", "", false),
-            new ColumnEntry("├──", "PAVE_PRI_LIA_IND", "Character", "1", "Required", "", false),
-            new ColumnEntry("├──", "PAVE_EMP_GAR_IND", "Character", "1", "Required", "", false),
-            new ColumnEntry("└──", "RATED_DRIVER_NBR", "UShort", "0", "Required", "", false)
-        );
-
-        // Select first row
-        tableView.getSelectionModel().selectFirst();
-    }
-
     /**
      * Data model for a column entry in the table.
      */
-    public static class ColumnEntry {
+    public static class ColumnEntry
+    {
         private final StringProperty treePrefix;
         private final StringProperty columnName;
+        private final StringProperty cobolName;
         private final StringProperty dataType;
         private final StringProperty length;
         private final StringProperty flags;
         private final StringProperty description;
         private final boolean isKey;
 
-        public ColumnEntry(String treePrefix, String columnName, String dataType, 
-                          String length, String flags, String description, boolean isKey) {
+        public ColumnEntry(String treePrefix, String columnName, String cobolName,
+                          String dataType, String length, String flags, String description, boolean isKey)
+        {
             this.treePrefix = new SimpleStringProperty(treePrefix);
             this.columnName = new SimpleStringProperty(columnName);
+            this.cobolName = new SimpleStringProperty(cobolName);
             this.dataType = new SimpleStringProperty(dataType);
             this.length = new SimpleStringProperty(length);
             this.flags = new SimpleStringProperty(flags);
@@ -412,6 +609,7 @@ public class DatabaseElementScreen extends BorderPane {
 
         public String getTreePrefix() { return treePrefix.get(); }
         public String getColumnName() { return columnName.get(); }
+        public String getCobolName() { return cobolName.get(); }
         public String getDataType() { return dataType.get(); }
         public String getLength() { return length.get(); }
         public String getFlags() { return flags.get(); }
@@ -420,6 +618,7 @@ public class DatabaseElementScreen extends BorderPane {
 
         public StringProperty treePrefixProperty() { return treePrefix; }
         public StringProperty columnNameProperty() { return columnName; }
+        public StringProperty cobolNameProperty() { return cobolName; }
         public StringProperty dataTypeProperty() { return dataType; }
         public StringProperty lengthProperty() { return length; }
         public StringProperty flagsProperty() { return flags; }
