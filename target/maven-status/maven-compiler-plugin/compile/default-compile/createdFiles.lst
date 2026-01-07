@@ -1,9 +1,0 @@
-com/genowa/ui/screens/LoginScreen.class
-com/genowa/model/GenField.class
-com/genowa/ui/screens/TablesScreen.class
-com/genowa/model/GenTable.class
-com/genowa/ui/screens/InsLineTableAssignScreen.class
-com/genowa/ui/screens/MainScreen.class
-com/genowa/ui/GenowaApp.class
-com/genowa/ui/screens/InsLineTableAssignScreen$1.class
-com/genowa/service/DatabaseService.class
