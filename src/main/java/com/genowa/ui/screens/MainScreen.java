@@ -1,5 +1,6 @@
 package com.genowa.ui.screens;
 
+import com.genowa.service.DatabaseService;
 import com.genowa.ui.GenowaApp;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
@@ -31,7 +32,8 @@ public class MainScreen
         // Create tabs
         Tab tablesTab = new Tab("Tables");
         tablesTab.setClosable(false);
-        tablesTab.setContent(createTablesPane());
+        TablesScreen tablesScreen = new TablesScreen(DatabaseService.getInstance());
+        tablesTab.setContent(tablesScreen.getView());
 
         Tab insLineTab = new Tab("Ins Line Table Assign");
         insLineTab.setClosable(false);
@@ -66,20 +68,6 @@ public class MainScreen
 
         menuBar.getMenus().addAll(fileMenu, helpMenu);
         return menuBar;
-    }
-
-    private VBox createTablesPane()
-    {
-        VBox pane = new VBox(10);
-        pane.setPadding(new Insets(20));
-
-        Label label = new Label("Tables Management");
-        label.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
-
-        Label infoLabel = new Label("Select 'Ins Line Table Assign' tab to manage insurance line table assignments.");
-
-        pane.getChildren().addAll(label, infoLabel);
-        return pane;
     }
 
     private HBox createStatusBar()

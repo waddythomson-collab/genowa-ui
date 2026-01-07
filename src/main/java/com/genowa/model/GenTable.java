@@ -36,6 +36,17 @@ public class GenTable
         this.tableId = tableId;
     }
 
+    // Alias for tableId
+    public Integer getId()
+    {
+        return tableId;
+    }
+
+    public void setId(Integer id)
+    {
+        this.tableId = id;
+    }
+
     public String getTableName()
     {
         return tableName;
@@ -54,6 +65,17 @@ public class GenTable
     public void setTableDesc(String tableDesc)
     {
         this.tableDesc = tableDesc;
+    }
+
+    // Alias for tableDesc
+    public String getDescription()
+    {
+        return tableDesc;
+    }
+
+    public void setDescription(String description)
+    {
+        this.tableDesc = description;
     }
 
     public Integer getParentTableId()

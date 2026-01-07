@@ -9,7 +9,9 @@ public class GenField
     private String fieldName;
     private String fieldDesc;
     private Integer fieldSeq;
+    private Integer seqNo;  // Alias for fieldSeq
     private String dataType;
+    private String fieldType;  // Alias for dataType
     private Integer fieldLength;
     private Integer decimalPlaces;
     private String keyFieldYn;
@@ -74,6 +76,30 @@ public class GenField
     public void setFieldSeq(Integer fieldSeq)
     {
         this.fieldSeq = fieldSeq;
+        this.seqNo = fieldSeq;
+    }
+
+    // Alias for fieldSeq
+    public Integer getSeqNo()
+    {
+        return seqNo != null ? seqNo : fieldSeq;
+    }
+
+    public void setSeqNo(Integer seqNo)
+    {
+        this.seqNo = seqNo;
+        this.fieldSeq = seqNo;
+    }
+
+    // Alias for fieldId
+    public Integer getId()
+    {
+        return fieldId;
+    }
+
+    public void setId(Integer id)
+    {
+        this.fieldId = id;
     }
 
     public String getDataType()
@@ -84,6 +110,19 @@ public class GenField
     public void setDataType(String dataType)
     {
         this.dataType = dataType;
+        this.fieldType = dataType;
+    }
+
+    // Alias for dataType
+    public String getFieldType()
+    {
+        return fieldType != null ? fieldType : dataType;
+    }
+
+    public void setFieldType(String fieldType)
+    {
+        this.fieldType = fieldType;
+        this.dataType = fieldType;
     }
 
     public Integer getFieldLength()
