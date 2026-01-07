@@ -75,9 +75,19 @@ public class MainScreen
         HBox statusBar = new HBox();
         statusBar.setPadding(new Insets(5, 10, 5, 10));
         statusBar.setStyle("-fx-background-color: #e0e0e0;");
+        statusBar.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
 
         statusLabel = new Label("User: " + GenowaApp.getCurrentUser() + " [" + GenowaApp.getCurrentUserRole() + "]");
-        statusBar.getChildren().add(statusLabel);
+
+        // Spacer to push logout button to the right
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        // Logout button
+        Button logoutBtn = new Button("Logout");
+        logoutBtn.setOnAction(e -> GenowaApp.showLoginScreen());
+
+        statusBar.getChildren().addAll(statusLabel, spacer, logoutBtn);
 
         return statusBar;
     }
