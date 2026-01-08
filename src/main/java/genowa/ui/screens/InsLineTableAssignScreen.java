@@ -18,6 +18,7 @@ import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.*;
 
 import java.util.*;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -277,8 +278,11 @@ public class InsLineTableAssignScreen extends BorderPane
         MenuItem deleteCompItem = new MenuItem("Delete Component");
         deleteCompItem.setOnAction(e -> onDeleteComponent());
         
-        MenuItem deleteAllItem = new MenuItem("Delete All for Insurance Line");
+        MenuItem deleteAllItem = new MenuItem("Delete All Tables");
         deleteAllItem.setOnAction(e -> onDeleteAll());
+        
+        MenuItem deleteInsLineItem = new MenuItem("Delete Insurance Line");
+        deleteInsLineItem.setOnAction(e -> onDeleteInsuranceLine());
         
         SeparatorMenuItem sep2 = new SeparatorMenuItem();
         
@@ -294,7 +298,7 @@ public class InsLineTableAssignScreen extends BorderPane
         menu.getItems().addAll(
             addItem, changeItem, deleteItem, copyItem,
             sep1,
-            deleteCompItem, deleteAllItem,
+            deleteCompItem, deleteAllItem, deleteInsLineItem,
             sep2,
             genCtlItem, genLkgItem, migrateItem
         );
@@ -363,6 +367,8 @@ public class InsLineTableAssignScreen extends BorderPane
         });
     }
     
+    private static final String ADD_NEW_OPTION = "<Add New...>";
+    
     /**
      * Load insurance lines from database (distinct values from gen_ctl)
      */
@@ -377,12 +383,13 @@ public class InsLineTableAssignScreen extends BorderPane
         });
         
         insLineCombo.getItems().clear();
+        insLineCombo.getItems().add(ADD_NEW_OPTION);  // Add New option at top
         insLineCombo.getItems().addAll(insLines);
         
-        // Select first and trigger load
-        if (!insLines.isEmpty())
+        // Select first actual insurance line (skip Add New)
+        if (insLines.size() > 0)
         {
-            insLineCombo.getSelectionModel().selectFirst();
+            insLineCombo.getSelectionModel().select(1);  // Select first real ins line
             onInsLineChanged();
         }
     }
@@ -395,6 +402,13 @@ public class InsLineTableAssignScreen extends BorderPane
         String selected = insLineCombo.getValue();
         if (selected == null) return;
         
+        // Handle "Add New..." option
+        if (ADD_NEW_OPTION.equals(selected))
+        {
+            showAddInsuranceLineDialog();
+            return;
+        }
+        
         currentInsLine = selected;
         
         // Build tree structure
@@ -404,8 +418,9 @@ public class InsLineTableAssignScreen extends BorderPane
         // Query tables for this insurance line from database
         List<WarpCtl> ctlRecords = ctlRepository.findByInsuranceLine(currentInsLine);
         
-        // Group by level type
+        // Filter out placeholder records and group by level type
         Map<String, List<WarpCtl>> byLevelType = ctlRecords.stream()
+            .filter(c -> !"__PLACEHOLDER__".equals(c.getId().getTableName().trim()))
             .collect(Collectors.groupingBy(c -> c.getLevelType().getCode()));
         
         // Add level types as main branches
@@ -436,6 +451,121 @@ public class InsLineTableAssignScreen extends BorderPane
         
         // Clear mappings
         mappings.clear();
+    }
+    
+    /**
+     * Show dialog to create a new insurance line
+     */
+    private void showAddInsuranceLineDialog()
+    {
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Add New Insurance Line");
+        dialog.setHeaderText("Create a new Insurance Line");
+        
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20));
+        
+        TextField codeField = new TextField();
+        codeField.setPromptText("e.g., PA, HO, GL");
+        codeField.setPrefWidth(100);
+        
+        TextField descField = new TextField();
+        descField.setPromptText("e.g., Personal Auto");
+        descField.setPrefWidth(250);
+        
+        grid.add(new Label("Line Code (1-3 chars):"), 0, 0);
+        grid.add(codeField, 1, 0);
+        grid.add(new Label("Description:"), 0, 1);
+        grid.add(descField, 1, 1);
+        
+        // Validation label
+        Label validationLabel = new Label();
+        validationLabel.setStyle("-fx-text-fill: red;");
+        grid.add(validationLabel, 0, 2, 2, 1);
+        
+        dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        
+        // Enable/disable OK based on validation
+        Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
+        okButton.setDisable(true);
+        
+        codeField.textProperty().addListener((obs, oldVal, newVal) ->
+        {
+            String code = newVal.toUpperCase().trim();
+            boolean valid = code.length() >= 1 && code.length() <= 3 && code.matches("[A-Z0-9]+");
+            
+            // Check if already exists
+            if (valid && insLineCombo.getItems().contains(code))
+            {
+                validationLabel.setText("Insurance Line '" + code + "' already exists");
+                valid = false;
+            }
+            else
+            {
+                validationLabel.setText("");
+            }
+            
+            okButton.setDisable(!valid);
+        });
+        
+        dialog.setResultConverter(button ->
+        {
+            if (button == ButtonType.OK)
+            {
+                return codeField.getText().toUpperCase().trim();
+            }
+            return null;
+        });
+        
+        Optional<String> result = dialog.showAndWait();
+        
+        if (result.isPresent())
+        {
+            String newCode = result.get();
+            createInsuranceLine(newCode);
+            
+            // Reload and select new line
+            loadInsuranceLines();
+            insLineCombo.getSelectionModel().select(newCode);
+            onInsLineChanged();
+        }
+        else
+        {
+            // User cancelled - revert to previous selection or first real line
+            if (currentInsLine != null)
+            {
+                insLineCombo.getSelectionModel().select(currentInsLine);
+            }
+            else if (insLineCombo.getItems().size() > 1)
+            {
+                insLineCombo.getSelectionModel().select(1);
+                onInsLineChanged();
+            }
+        }
+    }
+    
+    /**
+     * Create a new insurance line in the database
+     */
+    private void createInsuranceLine(String lineCode)
+    {
+        Database.getInstance().executeWrite(em ->
+        {
+            // Insert a placeholder record to establish the insurance line
+            // Use Primary level type with level 0 as a placeholder
+            em.createNativeQuery(
+                "INSERT INTO gen_ctl (warp_ins_line_cd, level_type_cd, db_ctl_level_nbr, " +
+                "db_sub_level_nbr, db_table_nm, db_parent_nm) VALUES (:insLine, 'P', 0, 0, '__PLACEHOLDER__', NULL)"
+            ).setParameter("insLine", lineCode)
+            .executeUpdate();
+        });
+        
+        showInfo("Insurance Line Created", 
+            "Insurance Line '" + lineCode + "' has been created.\n\n" +
+            "Use 'Add Table' to add table assignments.");
     }
     
     /**
@@ -755,11 +885,67 @@ public class InsLineTableAssignScreen extends BorderPane
                 "DELETE FROM gen_ctl_data WHERE warp_ins_line_cd = :insLine"
             ).setParameter("insLine", currentInsLine).executeUpdate();
             
-            // Then delete from gen_ctl
+            // Then delete from gen_ctl (except placeholder)
+            em.createNativeQuery(
+                "DELETE FROM gen_ctl WHERE warp_ins_line_cd = :insLine AND db_table_nm != '__PLACEHOLDER__'"
+            ).setParameter("insLine", currentInsLine).executeUpdate();
+        });
+    }
+    
+    private void onDeleteInsuranceLine()
+    {
+        if (currentInsLine == null) return;
+        
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Delete Insurance Line");
+        confirm.setHeaderText("Delete Insurance Line: " + currentInsLine + "?");
+        confirm.setContentText(
+            "This will permanently delete the Insurance Line and ALL its table assignments and mappings.\n\n" +
+            "This action cannot be undone."
+        );
+        
+        confirm.showAndWait().ifPresent(response ->
+        {
+            if (response == ButtonType.OK)
+            {
+                deleteInsuranceLineFromDatabase();
+                loadInsuranceLines();  // Refresh dropdown
+                
+                // Select first available line
+                if (insLineCombo.getItems().size() > 1)
+                {
+                    insLineCombo.getSelectionModel().select(1);
+                    onInsLineChanged();
+                }
+                else
+                {
+                    // No lines left - clear tree
+                    currentInsLine = null;
+                    rootItem = new TreeItem<>(new TreeNodeData("Root", NodeType.ROOT));
+                    tableTree.setRoot(rootItem);
+                    mappings.clear();
+                }
+            }
+        });
+    }
+    
+    private void deleteInsuranceLineFromDatabase()
+    {
+        Database.getInstance().executeWrite(em ->
+        {
+            // Delete from gen_ctl_data first
+            em.createNativeQuery(
+                "DELETE FROM gen_ctl_data WHERE warp_ins_line_cd = :insLine"
+            ).setParameter("insLine", currentInsLine).executeUpdate();
+            
+            // Then delete all from gen_ctl (including placeholder)
             em.createNativeQuery(
                 "DELETE FROM gen_ctl WHERE warp_ins_line_cd = :insLine"
             ).setParameter("insLine", currentInsLine).executeUpdate();
         });
+        
+        showInfo("Insurance Line Deleted", 
+            "Insurance Line '" + currentInsLine + "' has been deleted.");
     }
     
     private void onGenerateCtl()
